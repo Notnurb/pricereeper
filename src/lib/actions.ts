@@ -1,16 +1,16 @@
 'use server';
 
-import { sql, initDb } from './db';
-import { getBenchmark, evaluateRate, Skill, Region, Experience, RateSubmission } from './benchmarks';
+import { sql } from './db';
+import {
+  getBenchmark,
+  evaluateRate,
+  Skill,
+  Region,
+  Experience,
+  RateSubmission
+} from './benchmarks';
 
-let dbInitialized = false;
-
-async function ensureDb() {
-  if (!dbInitialized) {
-    await initDb();
-    dbInitialized = true;
-  }
-}
+const MIN_ROWS_FOR_RATIOS = 15;
 
 function generateShareId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -27,21 +27,23 @@ export async function submitRateAction(data: {
   experience: Experience;
   rate: number;
 }) {
-  await ensureDb();
-  
   const benchmark = getBenchmark(data.skill, data.region, data.experience);
   const evaluation = evaluateRate(data.rate, benchmark);
+  const isUnderpriced = data.rate < benchmark.median;
   const shareId = generateShareId();
-  
+
   try {
     const result = await sql`
-      INSERT INTO rate_submissions (share_id, skill, region, experience, rate, verdict, difference_pct)
-      VALUES (${shareId}, ${data.skill}, ${data.region}, ${data.experience}, ${data.rate}, ${evaluation.verdict}, ${evaluation.differencePct})
+      INSERT INTO rate_submissions
+        (share_id, skill, region, experience, rate, verdict, difference_pct, is_underpriced, source)
+      VALUES
+        (${shareId}, ${data.skill}, ${data.region}, ${data.experience}, ${data.rate},
+         ${evaluation.verdict}, ${evaluation.differencePct}, ${isUnderpriced}, 'user')
       RETURNING *
     `;
-    
+
     return {
-      success: true,
+      success: true as const,
       submission: {
         ...result[0],
         rate: parseFloat(result[0].rate)
@@ -50,47 +52,35 @@ export async function submitRateAction(data: {
     };
   } catch (error) {
     console.error('Failed to submit rate to DB:', error);
-    // Fallback response for offline or initial setup
     return {
-      success: false,
-      submission: {
-        share_id: shareId,
-        skill: data.skill,
-        region: data.region,
-        experience: data.experience,
-        rate: data.rate,
-        verdict: evaluation.verdict,
-        difference_pct: evaluation.differencePct,
-        created_at: new Date().toISOString()
-      } as RateSubmission,
+      success: false as const,
+      error: 'Could not save submission. The database may not be migrated yet.',
       benchmark
     };
   }
 }
 
 export async function getRateReportAction(shareId: string) {
-  await ensureDb();
   try {
     const result = await sql`
       SELECT * FROM rate_submissions WHERE share_id = ${shareId}
     `;
-    
+
     if (!result || result.length === 0) {
       return null;
     }
-    
+
     const sub = result[0];
-    // Cast variables properly
     const benchmark = getBenchmark(
-      sub.skill as Skill, 
-      sub.region as Region, 
+      sub.skill as Skill,
+      sub.region as Region,
       sub.experience as Experience
     );
-    
+
     return {
       submission: {
         ...sub,
-        rate: parseFloat(sub.rate) // neon returns numeric/decimal as string
+        rate: parseFloat(sub.rate)
       } as RateSubmission,
       benchmark
     };
@@ -101,50 +91,113 @@ export async function getRateReportAction(shareId: string) {
 }
 
 export async function getStatsAction() {
-  await ensureDb();
   try {
-    const totalCountQuery = await sql`SELECT COUNT(*) as count FROM rate_submissions`;
-    const totalCount = parseInt(totalCountQuery[0].count, 10);
-    
-    const underpricedQuery = await sql`
-      SELECT COUNT(*) as count FROM rate_submissions WHERE verdict IN ('underpriced', 'severely_underpriced')
+    const totalQ = await sql`SELECT COUNT(*)::int AS count FROM rate_submissions`;
+    const totalCount: number = totalQ[0]?.count ?? 0;
+
+    if (totalCount === 0) {
+      return {
+        totalCount: 0,
+        underpricedPct: null,
+        averageRate: null,
+        hasEnoughData: false,
+        minRowsForRatios: MIN_ROWS_FOR_RATIOS,
+        perSkill: [] as Array<{ key: string; averageRate: number; count: number }>,
+        perRegion: [] as Array<{ key: string; averageRate: number; count: number }>,
+        recent: [] as Array<{
+          skill: string;
+          region: string;
+          experience: string;
+          rate: number;
+          verdict: string;
+          created_at: string;
+        }>
+      };
+    }
+
+    const underQ = await sql`
+      SELECT COUNT(*)::int AS count FROM rate_submissions WHERE is_underpriced = TRUE
     `;
-    const underpricedCount = parseInt(underpricedQuery[0].count, 10);
-    
-    const averageRateQuery = await sql`SELECT AVG(rate) as avg_rate FROM rate_submissions`;
-    const averageRate = Math.round(parseFloat(averageRateQuery[0].avg_rate || '0'));
-    
-    const recentSubmissions = await sql`
-      SELECT skill, region, experience, rate, verdict, created_at FROM rate_submissions 
-      ORDER BY created_at DESC LIMIT 8
+    const underCount: number = underQ[0]?.count ?? 0;
+
+    const avgQ = await sql`SELECT AVG(rate) AS avg FROM rate_submissions`;
+    const averageRate =
+      avgQ[0]?.avg != null ? Math.round(parseFloat(avgQ[0].avg)) : null;
+
+    const recentQ = await sql`
+      SELECT skill, region, experience, rate, verdict, created_at
+      FROM rate_submissions
+      ORDER BY created_at DESC
+      LIMIT 10
     `;
-    
-    // Map numerical fields correctly
-    const formattedRecent = (recentSubmissions || []).map((sub: any) => ({
-      ...sub,
-      rate: parseFloat(sub.rate)
+    const recent = ((recentQ || []) as Array<Record<string, unknown>>).map((r) => ({
+      skill: String(r.skill),
+      region: String(r.region),
+      experience: String(r.experience),
+      rate: typeof r.rate === 'string' ? parseFloat(r.rate) : (r.rate as number),
+      verdict: String(r.verdict),
+      created_at:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : String(r.created_at)
     }));
 
+    const skillQ = await sql`
+      SELECT skill AS key, AVG(rate) AS avg, COUNT(*)::int AS count
+      FROM rate_submissions
+      GROUP BY skill
+      ORDER BY AVG(rate) DESC
+    `;
+    const perSkill = (skillQ as Array<Record<string, unknown>>).map((r) => ({
+      key: String(r.key),
+      averageRate: Math.round(parseFloat(String(r.avg))),
+      count: Number(r.count)
+    }));
+
+    const regionQ = await sql`
+      SELECT region AS key, AVG(rate) AS avg, COUNT(*)::int AS count
+      FROM rate_submissions
+      GROUP BY region
+      ORDER BY AVG(rate) DESC
+    `;
+    const perRegion = (regionQ as Array<Record<string, unknown>>).map((r) => ({
+      key: String(r.key),
+      averageRate: Math.round(parseFloat(String(r.avg))),
+      count: Number(r.count)
+    }));
+
+    const hasEnoughData = totalCount >= MIN_ROWS_FOR_RATIOS;
+
     return {
-      totalCount: totalCount || 0,
-      underpricedPct: totalCount > 0 ? Math.round((underpricedCount / totalCount) * 100) : 58,
-      averageRate: averageRate || 82,
-      recent: formattedRecent
+      totalCount,
+      underpricedPct: hasEnoughData
+        ? Math.round((underCount / totalCount) * 100)
+        : null,
+      averageRate: hasEnoughData ? averageRate : null,
+      hasEnoughData,
+      minRowsForRatios: MIN_ROWS_FOR_RATIOS,
+      perSkill,
+      perRegion,
+      recent
     };
   } catch (error) {
     console.error('Failed to get stats from DB:', error);
-    // Fallback data if table is empty or database is unreachable
     return {
-      totalCount: 42,
-      underpricedPct: 61,
-      averageRate: 88,
-      recent: [
-        { skill: 'Web Dev', region: 'US', experience: '3-5yrs', rate: 65, verdict: 'underpriced', created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
-        { skill: 'Design', region: 'EU', experience: '6+yrs', rate: 120, verdict: 'on_market', created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-        { skill: 'Writing', region: 'UK', experience: '0-2yrs', rate: 18, verdict: 'severely_underpriced', created_at: new Date(Date.now() - 32 * 60 * 1000).toISOString() },
-        { skill: 'Consulting', region: 'Remote-anywhere', experience: '6+yrs', rate: 220, verdict: 'premium', created_at: new Date(Date.now() - 58 * 60 * 1000).toISOString() },
-        { skill: 'Video', region: 'US', experience: '0-2yrs', rate: 25, verdict: 'underpriced', created_at: new Date(Date.now() - 120 * 60 * 1000).toISOString() }
-      ]
+      totalCount: 0,
+      underpricedPct: null,
+      averageRate: null,
+      hasEnoughData: false,
+      minRowsForRatios: MIN_ROWS_FOR_RATIOS,
+      perSkill: [] as Array<{ key: string; averageRate: number; count: number }>,
+      perRegion: [] as Array<{ key: string; averageRate: number; count: number }>,
+      recent: [] as Array<{
+        skill: string;
+        region: string;
+        experience: string;
+        rate: number;
+        verdict: string;
+        created_at: string;
+      }>
     };
   }
 }

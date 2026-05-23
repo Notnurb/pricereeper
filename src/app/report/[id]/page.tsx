@@ -27,14 +27,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!reportData) {
     return {
       title: "Rate Report Not Found | PriceReeper",
-      description: "The requested rate verification report could not be found."
+      description: "The requested rate check report could not be found."
     };
   }
 
   const { submission } = reportData;
   return {
-    title: `Verified Rate Report: ${submission.skill} ($${submission.rate}/hr) | PriceReeper`,
-    description: `Official PriceReeper compliance audit verifying a $${submission.rate}/hr hourly rate for a ${submission.skill} freelancer in ${submission.region} (${submission.experience} experience).`
+    title: `Rate Check Report: ${submission.skill} ($${submission.rate}/hr) | PriceReeper`,
+    description: `PriceReeper rate check for a $${submission.rate}/hr hourly rate as a ${submission.skill} freelancer in ${submission.region} (${submission.experience} experience), compared to a benchmark estimate.`
   };
 }
 
@@ -96,24 +96,24 @@ export default async function ReportPage({ params }: PageProps) {
         return {
           colorClass: 'text-lime-400 border-lime-500/30 bg-lime-500/5',
           badgeClass: 'bg-lime-500/20 text-lime-300 border-lime-500/30',
-          title: 'VERIFIED PREMIUM RATE',
-          description: 'Pricing matches or exceeds top 90th percentile values for this role.',
+          title: 'PREMIUM RATE',
+          description: 'Above the high end of the benchmark estimate for this skill, region, and experience tier.',
           icon: <Sparkles className="h-6 w-6 text-lime-400" />
         };
       case 'on_market':
         return {
           colorClass: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5',
           badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-          title: 'VERIFIED ON-MARKET',
-          description: 'Pricing aligns directly with current standard median marketplace benchmarks.',
+          title: 'ON-MARKET',
+          description: 'Inside the typical range of the benchmark estimate for this combination.',
           icon: <CheckCircle className="h-6 w-6 text-emerald-400" />
         };
       case 'underpriced':
         return {
           colorClass: 'text-amber-400 border-amber-500/30 bg-amber-500/5',
           badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-          title: 'VERIFIED UNDERPRICED',
-          description: 'Pricing is below the baseline target range for peers in this category.',
+          title: 'UNDERPRICED',
+          description: 'Below the median of the benchmark estimate for this combination.',
           icon: <TrendingDown className="h-6 w-6 text-amber-400" />
         };
       case 'severely_underpriced':
@@ -121,8 +121,8 @@ export default async function ReportPage({ params }: PageProps) {
         return {
           colorClass: 'text-red-400 border-red-500/30 bg-red-500/5',
           badgeClass: 'bg-red-500/20 text-red-300 border-red-500/30',
-          title: 'VERIFIED SEVERELY UNDERPRICED',
-          description: 'Pricing fails to meet baseline industry minimums for this level of expertise.',
+          title: 'SEVERELY UNDERPRICED',
+          description: 'Below the low end of the benchmark estimate for this combination.',
           icon: <AlertTriangle className="h-6 w-6 text-red-400" />
         };
     }
@@ -146,7 +146,7 @@ export default async function ReportPage({ params }: PageProps) {
             </span>
           </Link>
           <span className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase border border-zinc-800 bg-zinc-900/60 px-3 py-1 rounded-full">
-            OFFICIAL RATE AUDIT
+            RATE CHECK REPORT
           </span>
         </div>
       </header>
@@ -165,22 +165,22 @@ export default async function ReportPage({ params }: PageProps) {
             <div className="space-y-2">
               <div className="inline-flex items-center space-x-2 bg-zinc-800 text-zinc-300 font-mono text-[10px] px-2.5 py-1 rounded-full border border-zinc-700">
                 <Award className="h-3.5 w-3.5 text-lime-400" />
-                <span>RATE COMPLIANCE VERIFICATION</span>
+                <span>ANONYMOUS RATE CHECK</span>
               </div>
-              <h1 className="text-3xl font-black text-white tracking-tight">Verified Rate Report</h1>
+              <h1 className="text-3xl font-black text-white tracking-tight">Rate Check Report</h1>
               <p className="text-xs text-zinc-500 font-mono">
-                Audit Registry Key: <span className="text-white bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded ml-1 select-all">{submission.share_id}</span>
+                Report ID: <span className="text-white bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded ml-1 select-all">{submission.share_id}</span>
               </p>
             </div>
             
             <div className="text-left md:text-right font-mono text-[11px] text-zinc-500 space-y-1">
               <div className="flex items-center md:justify-end space-x-1.5">
                 <Calendar className="h-3.5 w-3.5" />
-                <span>Verified: {formattedDate}</span>
+                <span>Submitted: {formattedDate}</span>
               </div>
               <div className="flex items-center md:justify-end space-x-1.5">
                 <Globe className="h-3.5 w-3.5" />
-                <span>Market: {submission.region === 'Remote-anywhere' ? 'Global Remote' : submission.region}</span>
+                <span>Region: {submission.region === 'Remote-anywhere' ? 'Global Remote' : submission.region}</span>
               </div>
             </div>
           </div>
@@ -188,13 +188,13 @@ export default async function ReportPage({ params }: PageProps) {
           {/* MAIN VERIFICATION BLOCK */}
           <div className="py-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-center border-b border-white/5">
             <div className="md:col-span-5 space-y-1">
-              <span className="text-[10px] font-mono text-zinc-500 uppercase block tracking-wider">Freelancer Pricing</span>
+              <span className="text-[10px] font-mono text-zinc-500 uppercase block tracking-wider">Submitted Rate</span>
               <div className="text-5xl font-black text-white flex items-baseline tracking-tight">
                 <span>${submission.rate}</span>
                 <span className="text-lg font-bold text-zinc-500 ml-1">/ hr</span>
               </div>
               <p className="text-xs text-zinc-400 italic mt-2">
-                Standard hourly consulting fee.
+                Hourly rate, USD.
               </p>
             </div>
 
@@ -209,7 +209,7 @@ export default async function ReportPage({ params }: PageProps) {
                   {submission.skill} • {submission.experience === '0-2yrs' ? 'Junior' : submission.experience === '3-5yrs' ? 'Mid-level' : 'Senior (6+ YOE)'}
                 </h3>
                 <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                  {verdictStyles.description} This analysis evaluates structural pricing based on live surveys, market pricing indexes, and purchasing power metrics.
+                  {verdictStyles.description} The benchmark is an internal starting estimate per skill / region / experience tier — not a survey or external market index.
                 </p>
               </div>
             </div>
@@ -217,19 +217,19 @@ export default async function ReportPage({ params }: PageProps) {
 
           {/* BENCHMARK MATRIX TABLE */}
           <div className="py-8 space-y-6 border-b border-white/5">
-            <h3 className="text-sm font-extrabold text-zinc-300 tracking-wide uppercase font-mono">Benchmark Target Metrics</h3>
-            
+            <h3 className="text-sm font-extrabold text-zinc-300 tracking-wide uppercase font-mono">Benchmark Estimate Range</h3>
+
             <div className="grid grid-cols-3 gap-4 text-center font-mono">
               <div className="bg-zinc-900/40 border border-zinc-800/40 p-4 rounded-xl">
-                <span className="text-[10px] text-zinc-500 uppercase block">25th Percentile (Low)</span>
+                <span className="text-[10px] text-zinc-500 uppercase block">Low</span>
                 <span className="text-lg font-bold text-white mt-1 block">${benchmark.low}/hr</span>
               </div>
               <div className="bg-zinc-900/60 border border-zinc-800/60 p-4 rounded-xl ring-1 ring-white/5">
-                <span className="text-[10px] text-zinc-400 uppercase block">50th Percentile (Median)</span>
+                <span className="text-[10px] text-zinc-400 uppercase block">Median</span>
                 <span className="text-xl font-black text-lime-400 mt-1 block">${benchmark.median}/hr</span>
               </div>
               <div className="bg-zinc-900/40 border border-zinc-800/40 p-4 rounded-xl">
-                <span className="text-[10px] text-zinc-500 uppercase block">90th Percentile (High)</span>
+                <span className="text-[10px] text-zinc-500 uppercase block">High</span>
                 <span className="text-lg font-bold text-white mt-1 block">${benchmark.high}/hr</span>
               </div>
             </div>
@@ -278,14 +278,15 @@ export default async function ReportPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* SIGNATURE BLOCK */}
+          {/* FOOTER BLOCK */}
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-zinc-500">
             <div className="flex items-center space-x-2">
               <ShieldCheck className="h-5 w-5 text-emerald-500" />
-              <span>SHA-256 SIGNED: PRICE_REEPER_VERIFY_KEY</span>
+              <span>ANONYMOUS — NO NAME, EMAIL, OR IP STORED</span>
             </div>
             <div className="text-center sm:text-right">
-              SYSTEM TRUST VERDICT: <span className="text-lime-400 font-bold">100% COMPLIANT</span>
+              VERDICT VS. BENCHMARK ESTIMATE:{' '}
+              <span className={`font-bold ${verdictStyles.colorClass}`}>{verdictStyles.title}</span>
             </div>
           </div>
         </div>
@@ -304,8 +305,8 @@ export default async function ReportPage({ params }: PageProps) {
       {/* FOOTER */}
       <footer className="relative z-10 border-t border-white/5 bg-zinc-950 py-8 text-center text-xs text-zinc-600 font-mono">
         <div className="max-w-4xl mx-auto px-6 flex items-center justify-between">
-          <div>© {new Date().getFullYear()} PriceReeper. Secure Verification.</div>
-          <Link href="/" className="hover:text-zinc-400 transition">PriceReeper Calculator</Link>
+          <div>© {new Date().getFullYear()} PriceReeper. Anonymous rate check.</div>
+          <Link href="/" className="hover:text-zinc-400 transition">PriceReeper Home</Link>
         </div>
       </footer>
     </div>
